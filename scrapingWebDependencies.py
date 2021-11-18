@@ -20,7 +20,7 @@ def getMaxPageNum(searchKeyWords, browser, pageToSearchTerm):
     return max_num
 
 # extraction of the information
-def informationExtraction(browser, default_link):
+def informationExtraction(browser, default_link, db):
     # Extract and build data 
     # Parse html information
     soup = BeautifulSoup(browser.page_source, "lxml")
@@ -40,7 +40,7 @@ def informationExtraction(browser, default_link):
     # Operate multiprocessing
     #multiCore(url_list=url_list, all_div = all_div, browser=browser)
     # Operato one process 
-    oneCore(url_list=url_list, all_div = all_div, browser=browser)
+    oneCore(url_list=url_list, all_div = all_div, browser=browser, db = db)
 
     browser.implicitly_wait(1)
 
@@ -53,28 +53,26 @@ def multiCore(url_list, all_div, browser):
     # Multiprocessing
     p = mp.Pool()
     
-    for url in url_list:
-        for row in all_div:
-            p.apply_async(extractWrite, args=(url, row, browser))
+    for url, row in zip(url_list, all_div):
+        p.apply_async(extractWrite, args=(url, row, browser))
 
     # Close pool
     p.close()
     p.join()
 
-def oneCore(url_list, all_div, browser):
-    data_list = list()
-    for url in url_list:
-        for row in all_div:
-            data = extractWrite(url, row, browser)
-        
-            data_list.append(data)
-
+def oneCore(url_list, all_div, browser, db):
+    #data_list = list()
+    for url, row in zip(url_list, all_div):
+        data = extractWrite(url, row, browser, db)
+    
+        #data_list.append(data)
+    """
     for i in data_list:
         print(i)
+    """
 
 
-
-def extractWrite(url, row, browser):
+def extractWrite(url, row, browser, db):
     # Extract information and write into MongoDB
     abstract, keywords = singlePageExtract(url, browser)
     # Extract title, author, date and other information
@@ -92,28 +90,28 @@ def extractWrite(url, row, browser):
         'abstract': abstract,
         'keywords': keywords
     }
-    """
     # Check if already existed
-    if db.med_nlp.find({'url': link}).limit(1):
+    if db.med_nlp.find_one({'url': url}) != None:
         print(data, 'already exists.')
     else:
         # Insert data into MongoDB's Pubmed database's med_nlp collections
         db.med_nlp.insert_one(data)  
-    """
-    return data
 
 
 def singlePageExtract(url, browser):
     # Get the abstract and paper keywords
     
-    #print(url)
+    print(url)
     # Set waiting time to avoid high traffic
     browser.implicitly_wait(random.randint(2, 3))
     
     # Get target page information
-    tempo_html = requests.get(url,  headers = requestHeader(url))
-    
-    tempo_soup = BeautifulSoup(tempo_html.text, 'lxml')
+    try:
+        tempo_html = requests.get(url,  headers = requestHeader(url))
+        time.sleep(1)
+        tempo_soup = BeautifulSoup(tempo_html.text, 'lxml')
+    except: 
+        print("NO se obtuvo respuesta")
     
     # Find and collect the abstract
     try:
